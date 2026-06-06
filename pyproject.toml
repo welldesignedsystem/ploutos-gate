@@ -8,8 +8,10 @@ dependencies = [
     "mcp",
     "praw",
     "python-dotenv",
+    "deepagents",
+    "langchain-anthropic",
 ]
 
 [tool.setuptools.packages.find]
 where = ["src/modules"]
-include = ["reddit*", "seo*", "aeo*", "geo*"]
+include = ["reddit*", "seo*", "aeo*", "geo*", "llm*"]

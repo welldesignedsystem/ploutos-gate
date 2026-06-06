@@ -1,4 +1,3 @@
-import os
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -7,7 +6,7 @@ from mcp.server.fastmcp import FastMCP
 
 from .client import RedditClient
 from .config import RedditConfig
-from .tools import browse, info, monitor, search, write
+from .analyze.tools import register as analyze_register
 
 mcp = FastMCP("Reddit", instructions="Reddit search, browse, and engagement tools for SEO/AEO/GEO research.")
 
@@ -27,11 +26,7 @@ def _get_client() -> RedditClient:
     return _client
 
 
-search.register_tools(mcp, _get_client)
-browse.register_tools(mcp, _get_client)
-info.register_tools(mcp, _get_client)
-monitor.register_tools(mcp, _get_client)
-write.register_tools(mcp, _get_client)
+analyze_register.register_tools(mcp, _get_client)
 
 
 if __name__ == "__main__":
