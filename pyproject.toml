@@ -1,0 +1,14 @@
+[project]
+name = "ploutos-gate"
+version = "0.1.0"
+description = "SEO, AEO, and GEO utility libraries"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "mcp",
+    "praw",
+    "python-dotenv",
+]
+
+[tool.setuptools.packages.find]
+include = ["ploutos_gate*"]
