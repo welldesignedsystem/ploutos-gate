@@ -11,4 +11,5 @@ dependencies = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["ploutos_gate*"]
+where = ["src/modules"]
+include = ["reddit*", "seo*", "aeo*", "geo*"]
