@@ -1,62 +1,70 @@
 # ploutos-gate
 
-Python 3.12 package. Dependencies: `mcp`, `praw`, `python-dotenv`, `deepagents`, `langchain-anthropic`.
+Python 3.12, package `ploutos-gate` (hyphen). Sources under `src/modules/` — discoverable packages are `reddit*`, `llm*` (others planned: `seo*`, `aeo*`, `geo*`). Deps: `mcp`, `praw`, `python-dotenv`, `deepagents`, `langchain-anthropic`.
 
-## Install & verify
+## Commands
 
 ```bash
-.venv/bin/python -m ensurepip          # one-time pip bootstrap
+# install (either works)
 .venv/bin/pip3 install -e .
-.venv/bin/python -c "from reddit.server import mcp; print('OK')"
-```
+uv pip install -e .            # uv.lock present
 
-`uv` also works (uv.lock present): `uv pip install -e .`
+# optional dev extras (pytest, ruff, mypy)
+uv pip install -e ".[dev]"
 
-## Run MCP server (streamable-http on :8000)
-
-```bash
+# run MCP server (streamable-http on :8000)
 .venv/bin/python -m reddit.server
+
+# test (no test prefix needed, pytest auto-discovers)
+.venv/bin/python -m pytest
+
+# lint
+.venv/bin/python -m ruff check .
+
+# typecheck
+.venv/bin/python -m mypy src/modules
+
+# lint + format
+.venv/bin/python -m ruff format --check .
 ```
 
-Copy `.env.example` → `.env`, fill in `REDDIT_CLIENT_ID`, `REDDIT_CLIENT_SECRET`, and `ANTHROPIC_API_KEY`. The server loads `.env` automatically.
+## Toolchain quirks
+
+- **Lint**: ruff, `line-length = 120`, `quote-style = "double"`, rules `E,F,I,N,W,UP,B,SIM`.
+- **Typecheck**: mypy `strict = true`; ignores `praw.*`, `deepagents.*`, `mcp.*`.
+- **Tests**: pytest + pytest-mock, no prefix/suffix convention. Test files live in `tests/`.
 
 ## Architecture
 
 ```
 src/modules/
-  reddit/           — Reddit API data layer (PRAW)
-    server.py       — FastMCP, lazy singleton RedditClient
-    client.py       — PRAW wrapper, 1 req/s throttle, subreddit filtering
-    config.py       — RedditConfig dataclass from REDDIT_* env vars
-    analyze/        — AI analysis layer (Deep Agents)
-      models.py       — Pydantic schemas for 8 analysis capabilities
-      capabilities.py — Deep agent per capability, calls RedditClient directly
-      tools/
-        register.py   — 8 analyzer_* MCP tools (the only MCP surface)
-  llm/              — Shared LLM provider abstraction
-    models.py       — LLMConfig: provider-agnostic, reads LLM_PROVIDER / LLM_MODEL / *_API_KEY
-    agent.py        — create_agent(config, tools, prompt) factory
+  reddit/
+    server.py                — FastMCP, lazy RedditClient singleton
+    client.py                — PRAW wrapper, 1 req/s throttle, subreddit filtering
+    config.py                — RedditConfig (dataclass) from REDDIT_* env vars
+    analyze/
+      models.py              — Pydantic schemas for 8 analysis capabilities
+      capabilities.py        — DeepAgent per capability calling RedditClient directly
+      tools/register.py      — 8 analyzer_* MCP tools (the only MCP surface)
+  llm/
+    models.py                — LLMConfig: reads LLM_PROVIDER / LLM_MODEL / *_API_KEY
+    agent.py                 — create_agent(config, tools, prompt) factory
 ```
 
-### How analysis works
-
-```
-User → reddit.analyze MCP tool
-  → deepagent (with capability-specific system prompt)
-    → calls RedditClient methods directly (in-process)
-    → LLM analyzes results
-  → returns analysis string
-```
+Analysis flow: MCP tool → `run_analysis(capability, query, client)` → `LLMConfig.from_env()` → `create_agent(config, tools, prompt)` → agent calls `RedditClient` in-process → returns LLM output string.
 
 ## Key facts
 
-- **Reddit write tools** require `REDDIT_USERNAME` + `REDDIT_PASSWORD`.
-- **LLM provider** is swappable via `LLM_PROVIDER` env var — no code changes.
-- **Subreddit filtering**: `REDDIT_SUBREDDIT_ALLOWLIST` / `REDDIT_SUBREDDIT_BLOCKLIST`, comma-separated, case-insensitive.
+- **.env must exist** with `REDDIT_CLIENT_ID` + `REDDIT_CLIENT_SECRET` + `ANTHROPIC_API_KEY`. Loaded automatically in `server.py` via `load_dotenv()`.
+- **Reddit write tools** (`create_post`, `reply`) require `REDDIT_USERNAME` + `REDDIT_PASSWORD`.
+- **LLM provider** swappable via `LLM_PROVIDER`; set the corresponding `*_API_KEY`. Default: `anthropic` / `claude-sonnet-4-6`.
+- **Subreddit filtering**: `REDDIT_SUBREDDIT_ALLOWLIST` / `REDDIT_SUBREDDIT_BLOCKLIST`, comma-separated, case-insensitive. Blocklist takes priority.
 - **Rate limit**: 1 Reddit API call/sec (`client.py:22-27`).
-- **Limit clamping**: all reddit tools cap at 100 (`min(limit, 100)`).
-- **Tool output**: formatted strings, not raw dicts.
-- **`track_mentions`**: comma-separated `keywords`, splits internally.
-- **`reply`**: post vs comment by ID length (≥6 chars = submission).
-- **Transport**: `streamable-http` (not default stdio).
-- **No tests, CI, or linters** configured. No git history (all files untracked).
+- **Limit clamping**: all tools clamp to 100 via `min(limit, 100)` in `_make_tools` + `le=100` in `AnalysisBase`.
+- **Tool output**: formatted strings (not raw dicts).
+- **Transport**: `streamable-http` (not default stdio), port 8000.
+- **`reply` routing**: `len(parent_id) >= 6` → submission, else comment.
+- **`track_mentions` param**: takes `list[str]` keywords (not comma-separated string).
+- **`REDDIT_USER_AGENT`**: env-overridable, default `"ploutos-gate:1.0.0 (by /u/ploutos-gate-bot)"`.
+- **No CI** configured.
+- **`main.py` at root** is unused — entrypoint is `reddit.server`.
