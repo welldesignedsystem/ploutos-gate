@@ -12,6 +12,36 @@ dependencies = [
     "langchain-anthropic",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-mock>=3",
+    "ruff>=0.9",
+    "mypy>=1.14",
+]
+
 [tool.setuptools.packages.find]
 where = ["src/modules"]
 include = ["reddit*", "seo*", "aeo*", "geo*", "llm*"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+src = ["src/modules"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+exclude = [
+    ".venv/",
+    "build/",
+]
+[[tool.mypy.overrides]]
+module = ["praw.*", "deepagents.*", "mcp.*"]
+ignore_missing_imports = true

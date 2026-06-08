@@ -1,5 +1,5 @@
 import time
-from collections.abc import Generator
+from typing import Any
 
 import praw
 import praw.models
@@ -19,21 +19,21 @@ class RedditClient:
         )
         self._last_call = 0.0
 
-    def _throttle(self):
+    def _throttle(self) -> None:
         now = time.time()
         elapsed = now - self._last_call
         if elapsed < 1.0:
             time.sleep(1.0 - elapsed)
         self._last_call = time.time()
 
-    def _check_subreddit(self, name: str):
+    def _check_subreddit(self, name: str) -> None:
         if not self.config.is_subreddit_allowed(name):
             raise PermissionError(f"Subreddit r/{name} is not allowed")
 
     def search_posts(
         self, query: str, subreddit: str | None = None, sort: str = "relevance",
         limit: int = 10, time_filter: str = "all",
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         self._throttle()
         if subreddit:
             self._check_subreddit(subreddit)
@@ -42,7 +42,7 @@ class RedditClient:
             results = self._praw.subreddit("all").search(query, sort=sort, limit=limit, time_filter=time_filter)
         return [self._post_to_dict(p) for p in results]
 
-    def get_post(self, post_id: str) -> dict:
+    def get_post(self, post_id: str) -> dict[str, Any]:
         self._throttle()
         submission = self._praw.submission(id=post_id)
         submission.comments.replace_more(limit=0)
@@ -64,17 +64,17 @@ class RedditClient:
     def read_subreddit(
         self, subreddit: str, sort: str = "hot", limit: int = 25,
         time_filter: str | None = None,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         self._check_subreddit(subreddit)
         self._throttle()
         sub = self._praw.subreddit(subreddit)
         method = getattr(sub, sort, sub.hot)
-        kwargs = {"limit": limit}
+        kwargs: dict[str, Any] = {"limit": limit}
         if sort in ("top", "controversial") and time_filter:
             kwargs["time_filter"] = time_filter
         return [self._post_to_dict(p) for p in method(**kwargs)]
 
-    def subreddit_info(self, subreddit: str) -> dict:
+    def subreddit_info(self, subreddit: str) -> dict[str, Any]:
         self._check_subreddit(subreddit)
         self._throttle()
         sub = self._praw.subreddit(subreddit)
@@ -89,7 +89,7 @@ class RedditClient:
             "over18": sub.over18,
         }
 
-    def user_info(self, username: str) -> dict:
+    def user_info(self, username: str) -> dict[str, Any]:
         self._throttle()
         user = self._praw.redditor(name=username)
         user._fetch()
@@ -102,17 +102,16 @@ class RedditClient:
             "is_mod": user.is_mod,
         }
 
-    def create_post(self, subreddit: str, title: str, text: str | None = None, url: str | None = None) -> dict:
+    def create_post(
+        self, subreddit: str, title: str, text: str | None = None, url: str | None = None,
+    ) -> dict[str, Any]:
         self._check_subreddit(subreddit)
         self._throttle()
         sub = self._praw.subreddit(subreddit)
-        if url:
-            submission = sub.submit(title, url=url)
-        else:
-            submission = sub.submit(title, selftext=text or "")
+        submission = sub.submit(title, url=url) if url else sub.submit(title, selftext=text or "")
         return self._post_to_dict(submission)
 
-    def reply(self, parent_id: str, body: str) -> dict:
+    def reply(self, parent_id: str, body: str) -> dict[str, Any]:
         self._throttle()
         item = self._praw.submission(id=parent_id) if len(parent_id) >= 6 else self._praw.comment(id=parent_id)
         reply = item.reply(body)
@@ -125,7 +124,7 @@ class RedditClient:
     def track_mentions(
         self, keywords: list[str], subreddits: list[str] | None = None,
         limit: int = 100, time_filter: str = "week",
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         results = []
         sources = subreddits or ["all"]
         for kw in keywords:
@@ -142,7 +141,7 @@ class RedditClient:
         return results
 
     @staticmethod
-    def _post_to_dict(post: praw.models.Submission) -> dict:
+    def _post_to_dict(post: praw.models.Submission) -> dict[str, Any]:
         return {
             "id": post.id,
             "title": post.title,

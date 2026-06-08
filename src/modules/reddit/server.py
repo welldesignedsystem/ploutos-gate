@@ -2,11 +2,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import FastMCP  # noqa: E402
 
-from .client import RedditClient
-from .config import RedditConfig
-from .analyze.tools import register as analyze_register
+from .analyze.tools import register as analyze_register  # noqa: E402
+from .client import RedditClient  # noqa: E402
+from .config import RedditConfig  # noqa: E402
 
 mcp = FastMCP("Reddit", instructions="Reddit search, browse, and engagement tools for SEO/AEO/GEO research.")
 

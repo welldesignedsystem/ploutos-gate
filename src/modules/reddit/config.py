@@ -29,8 +29,10 @@ class RedditConfig:
 
     def is_subreddit_allowed(self, subreddit: str) -> bool:
         name = subreddit.lower()
-        if name in self.subreddit_blocklist:
+        blocked = [s.lower() for s in self.subreddit_blocklist]
+        if name in blocked:
             return False
         if self.subreddit_allowlist:
-            return name in self.subreddit_allowlist
+            allowed = [s.lower() for s in self.subreddit_allowlist]
+            return name in allowed
         return True

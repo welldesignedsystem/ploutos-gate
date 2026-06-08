@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 from llm.agent import create_agent
 from llm.models import LLMConfig
 
@@ -100,7 +102,7 @@ PROMPTS = {
 }
 
 
-def _make_tools(client: RedditClient):
+def _make_tools(client: RedditClient) -> list[Callable[..., str]]:
     def search_posts(
         query: str,
         subreddit: str | None = None,
@@ -134,4 +136,4 @@ def run_analysis(capability: str, user_query: str, client: RedditClient) -> str:
     result = agent.invoke(
         {"messages": [{"role": "user", "content": user_query}]}
     )
-    return result["messages"][-1].content
+    return str(result["messages"][-1].content)

@@ -2,6 +2,7 @@ from collections.abc import Callable
 
 from mcp.server.fastmcp import FastMCP
 
+from ...client import RedditClient
 from ..capabilities import run_analysis
 from ..models import (
     AudienceLanguage,
@@ -15,7 +16,7 @@ from ..models import (
 )
 
 
-def register_tools(mcp: FastMCP, get_client: Callable) -> None:
+def register_tools(mcp: FastMCP, get_client: Callable[[], RedditClient]) -> None:
     @mcp.tool(
         name="analyzer_keyword_discovery",
         description=(
