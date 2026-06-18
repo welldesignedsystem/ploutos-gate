@@ -11,7 +11,7 @@ _KEYWORD_PROMPT = (
     "Using the Reddit tools available to you:\n"
     "1. Search for posts about the given topic across specified subreddits\n"
     "2. Read post titles and selftext to extract exact phrases real users searched for\n"
-    "3. Identify question formats (\"how to X\", \"why does Y\", \"best Z for\")\n"
+    '3. Identify question formats ("how to X", "why does Y", "best Z for")\n'
     "4. Spot niche terminology and subreddit-specific jargon\n"
     "5. Return the keywords grouped by search intent with frequency estimates\n\n"
     "Focus on phrases that actual keyword tools would miss."
@@ -64,7 +64,7 @@ _BACKLINK_PROMPT = (
     "Using the Reddit tools:\n"
     "1. Search for external links in posts and comments about the topic\n"
     "2. For each linked page, note: domain, URL, anchor context, post score\n"
-    "3. Identify patterns — \"if they linked to X here, they'd link to similar Y\"\n"
+    '3. Identify patterns — "if they linked to X here, they\'d link to similar Y"\n'
     "4. Flag orphan topics where people ask for resources but no one links\n\n"
     "Return a list of link placement opportunities with rationale."
 )
@@ -72,7 +72,7 @@ _BACKLINK_PROMPT = (
 _SERP_PROMPT = (
     "You are a SERP analyst modeling what Google rewards in Reddit threads.\n\n"
     "Using the Reddit tools:\n"
-    "1. Search for the query — focus on \"best X\" and \"X Reddit\" patterns\n"
+    '1. Search for the query — focus on "best X" and "X Reddit" patterns\n'
     "2. Analyze the highest-ranked threads: title structure, formatting, engagement\n"
     "3. Identify common patterns: list posts, comparison tables, detailed guides\n"
     "4. Note what Google seems to reward: comment count? post age? formatting?\n\n"
@@ -133,7 +133,5 @@ def run_analysis(capability: str, user_query: str, client: RedditClient) -> str:
     config = LLMConfig.from_env()
     tools = _make_tools(client)
     agent = create_agent(config, tools, PROMPTS[capability])
-    result = agent.invoke(
-        {"messages": [{"role": "user", "content": user_query}]}
-    )
+    result = agent.invoke({"messages": [{"role": "user", "content": user_query}]})
     return str(result["messages"][-1].content)

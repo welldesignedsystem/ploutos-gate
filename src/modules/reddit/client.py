@@ -31,8 +31,12 @@ class RedditClient:
             raise PermissionError(f"Subreddit r/{name} is not allowed")
 
     def search_posts(
-        self, query: str, subreddit: str | None = None, sort: str = "relevance",
-        limit: int = 10, time_filter: str = "all",
+        self,
+        query: str,
+        subreddit: str | None = None,
+        sort: str = "relevance",
+        limit: int = 10,
+        time_filter: str = "all",
     ) -> list[dict[str, Any]]:
         self._throttle()
         if subreddit:
@@ -49,20 +53,25 @@ class RedditClient:
         comments = []
         for c in submission.comments.list():
             if isinstance(c, praw.models.Comment):
-                comments.append({
-                    "id": c.id,
-                    "author": str(c.author) if c.author else "[deleted]",
-                    "body": c.body,
-                    "score": c.score,
-                    "created_utc": c.created_utc,
-                })
+                comments.append(
+                    {
+                        "id": c.id,
+                        "author": str(c.author) if c.author else "[deleted]",
+                        "body": c.body,
+                        "score": c.score,
+                        "created_utc": c.created_utc,
+                    }
+                )
         return {
             **self._post_to_dict(submission),
             "comments": comments,
         }
 
     def read_subreddit(
-        self, subreddit: str, sort: str = "hot", limit: int = 25,
+        self,
+        subreddit: str,
+        sort: str = "hot",
+        limit: int = 25,
         time_filter: str | None = None,
     ) -> list[dict[str, Any]]:
         self._check_subreddit(subreddit)
@@ -103,7 +112,11 @@ class RedditClient:
         }
 
     def create_post(
-        self, subreddit: str, title: str, text: str | None = None, url: str | None = None,
+        self,
+        subreddit: str,
+        title: str,
+        text: str | None = None,
+        url: str | None = None,
     ) -> dict[str, Any]:
         self._check_subreddit(subreddit)
         self._throttle()
@@ -122,8 +135,11 @@ class RedditClient:
         }
 
     def track_mentions(
-        self, keywords: list[str], subreddits: list[str] | None = None,
-        limit: int = 100, time_filter: str = "week",
+        self,
+        keywords: list[str],
+        subreddits: list[str] | None = None,
+        limit: int = 100,
+        time_filter: str = "week",
     ) -> list[dict[str, Any]]:
         results = []
         sources = subreddits or ["all"]
@@ -133,11 +149,13 @@ class RedditClient:
                     self._check_subreddit(src)
                 self._throttle()
                 for post in self._praw.subreddit(src).search(kw, limit=limit, time_filter=time_filter):
-                    results.append({
-                        "keyword": kw,
-                        "subreddit": post.subreddit.display_name,
-                        **self._post_to_dict(post),
-                    })
+                    results.append(
+                        {
+                            "keyword": kw,
+                            "subreddit": post.subreddit.display_name,
+                            **self._post_to_dict(post),
+                        }
+                    )
         return results
 
     @staticmethod

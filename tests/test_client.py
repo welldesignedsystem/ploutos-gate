@@ -146,9 +146,7 @@ class TestReadSubreddit:
     def test_top_with_time_filter(self, client, mock_praw):
         mock_praw.return_value.subreddit.return_value.top.return_value = []
         client.read_subreddit("python", sort="top", time_filter="month")
-        mock_praw.return_value.subreddit.return_value.top.assert_called_with(
-            limit=25, time_filter="month"
-        )
+        mock_praw.return_value.subreddit.return_value.top.assert_called_with(limit=25, time_filter="month")
 
     def test_new_no_time_filter(self, client, mock_praw):
         mock_praw.return_value.subreddit.return_value.new.return_value = []
@@ -205,9 +203,7 @@ class TestCreatePost:
 
         result = client.create_post("python", "Hello", text="World")
 
-        mock_praw.return_value.subreddit.return_value.submit.assert_called_with(
-            "Hello", selftext="World"
-        )
+        mock_praw.return_value.subreddit.return_value.submit.assert_called_with("Hello", selftext="World")
         assert result["title"] == "Hello"
 
     def test_link_post(self, client, mock_praw):
@@ -216,9 +212,7 @@ class TestCreatePost:
 
         client.create_post("python", "Link", url="https://example.com")
 
-        mock_praw.return_value.subreddit.return_value.submit.assert_called_with(
-            "Link", url="https://example.com"
-        )
+        mock_praw.return_value.subreddit.return_value.submit.assert_called_with("Link", url="https://example.com")
 
 
 class TestReply:

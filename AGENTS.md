@@ -1,6 +1,6 @@
 # ploutos-gate
 
-Python 3.12. Sources under `src/modules/` import flat — use `from reddit.client import RedditClient`, NOT `from modules.reddit.client`. Deps: `mcp`, `praw`, `python-dotenv`, `deepagents`, `langchain-anthropic`, `httpx`, `beautifulsoup4`, `lxml`, `fastapi`, `uvicorn`.
+Python 3.12. Sources under `src/modules/` import flat — use `from reddit.client import RedditClient`, NOT `from modules.reddit.client`.
 
 ## Commands
 
@@ -8,43 +8,47 @@ Python 3.12. Sources under `src/modules/` import flat — use `from reddit.clien
 uv pip install -e ".[dev]"          # install + dev extras
 uv run pytest                       # tests (auto-discovers, no prefix)
 uv run ruff check .                 # lint
-uv run mypy src/modules             # typecheck (strict, ignores praw/deepagents/mcp)
+uv run mypy src/modules             # typecheck (strict)
 uv run ruff format --check .        # format check (double quotes, 120 width)
-uv run python -m reddit.server      # MCP server port 8000
-uv run python -m rankprint.mcp_server  # MCP server port 8001
-uv run python -m rankprint.api_server   # FastAPI port 8001 /api/scan
+uv run python -m reddit.server      # MCP server port 8000 (streamable-http)
+uv run python -m rankprint.mcp_server   # MCP server port 8001 (streamable-http)
+uv run uvicorn rankprint.api_server:app --port 8001  # FastAPI /api/scan + /health
 ```
 
-## Architecture
+## Packages
 
 ### reddit (port 8000, streamable-http)
-- `server.py` — FastMCP, lazy `RedditClient` singleton, calls `load_dotenv()`
+- `server.py` — FastMCP, lazy `RedditClient` singleton, `load_dotenv()` at import time
 - `client.py` — PRAW wrapper, 1 req/s throttle, subreddit allow/block filtering
-- `analyze/capabilities.py` — DeepAgent per capability, tools: search_posts, get_post, read_subreddit
+- `config.py` — `RedditConfig` from `REDDIT_*` env vars; `is_subreddit_allowed()` blocklist-precedence
+- `analyze/models.py` — Pydantic input schemas per capability; limit clamped `ge=1, le=100`
+- `analyze/capabilities.py` — DeepAgent per capability; tools: `search_posts`, `get_post`, `read_subreddit`
 - `analyze/tools/register.py` — 8 `analyzer_*` MCP tools (sole MCP surface), output = formatted strings
-- Limit clamped to 100 (`min(limit, 100)` in capabilities, `le=100` in models)
 
 ### llm
 - `models.py` — `LLMConfig` reads `LLM_PROVIDER` / `LLM_MODEL` / `{PROVIDER}_API_KEY`
 - `agent.py` — `create_agent(config, tools, prompt)` → `deepagents.create_deep_agent`
-- `client.py` — async `chat()` for simple LLM prompts, `structured_chat()` for Pydantic-validated JSON output (used by rankprint to extract profile + generate queries)
+- `client.py` — async `chat()` (Anthropic direct API), `structured_chat()` for Pydantic-validated JSON output (also supports `list[BaseModel]`)
 
-### rankprint (port 8001, streamable-http)
-- `mcp_server.py` — `rankprint_scan` takes `url` + `terms[]`, returns JSON. Uses `ToolAnnotations(readOnlyHint=True)`.
-- `api_server.py` — FastAPI `POST /api/scan` + `GET /health`
-- `client.py` — orchestrator: scrape → extract `BusinessProfile` (LLM structured) → generate relevant SERP queries (LLM structured) → search DuckDuckGo → classify results → return `CompanyScanOutput`. Falls back to raw user `terms` if LLM unavailable.
-- `serp.py` — `DuckDuckGoChecker` (active); `BingChecker`/`GoogleCSEChecker`/`TavilyChecker` (defined but unwired)
-- `models.py` — `ScanRequest(url, terms[])` input, `BusinessProfile` (extracted via LLM), `GeneratedSearchQuery` (with intent+reason), `CompanyScanOutput` output; legacy `RankprintOutput` schemas
-- `aggregator.py`, `crawler.py`, `keyword_gen.py`, `business.py`, `query_gen.py` — **unused/dead code**, not imported by `client.py`
-- `README.md` is **aspirational** — describes planned Node.js infrastructure not present in this Python codebase
+### rankprint (port 8001)
+- `mcp_server.py` — FastMCP `rankprint_scan` tool, takes `url` + `terms[]` + `max_queries` (default 10) + `results_per_query` (default 10)
+- `api_server.py` — FastAPI `POST /api/scan` + `GET /health`; no `__main__`, run via `uvicorn`
+- `client.py` — orchestrator: fetch page text → extract `BusinessProfile` (LLM `structured_chat`) → generate up to `max_queries` search queries (LLM) → run each against all available providers → classify → `CompanyScanOutput`. Falls back to raw `terms` (truncated to `max_queries`) if LLM unavailable.
+- `serp.py` — `DuckDuckGoChecker` (httpx POST to `html.duckduckgo.com/html/`, no API key, configurable delay via `RANKPRINT_SERP_DELAY` env var, default 3s), `TavilyChecker` (httpx POST to `api.tavily.com/search`, needs `TAVILY_API_KEY`, 1 req/s throttle)
+- `models.py` — `ScanRequest(url, terms[], max_queries, results_per_query)` input, `CompanyScanOutput` output
+- `crawler.py` — `fetch_page_text()` via httpx + bs4; strips script/style/nav/footer/header/aside; truncates at 10k chars
 
 ## Key facts
 
-- `.env` must exist with `REDDIT_CLIENT_ID` + `REDDIT_CLIENT_SECRET` + `ANTHROPIC_API_KEY`. Loaded by `load_dotenv()` in each server entrypoint.
-- Write tools (`create_post`, `reply`) require `REDDIT_USERNAME` + `REDDIT_PASSWORD`.
-- `reply` routing: `len(parent_id) >= 6` → submission, else comment.
-- `track_mentions` takes `list[str]` keywords, not comma-separated string.
-- LLM provider swappable via `LLM_PROVIDER`; default `anthropic` / `claude-sonnet-4-6`.
+- `.env` must exist with `REDDIT_CLIENT_ID` + `REDDIT_CLIENT_SECRET` + `ANTHROPIC_API_KEY`
+- `load_dotenv()` fires at import time in `reddit/server.py`, `rankprint/mcp_server.py`, and `rankprint/api_server.py`
+- Write tools (`create_post`, `reply`) require `REDDIT_USERNAME` + `REDDIT_PASSWORD`
+- `reply` routing: `len(parent_id) >= 6` → `praw.submission()`, else `praw.comment()`
+- `track_mentions` takes `list[str]` keywords, not comma-separated string
+- LLM provider swappable via `LLM_PROVIDER`; default `anthropic` / `claude-sonnet-4-6`
 - Subreddit filters: `REDDIT_SUBREDDIT_ALLOWLIST` / `BLOCKLIST`, comma-separated, case-insensitive. Blocklist wins.
 - `main.py` at root is unused. No CI configured.
-- Rankprint: DuckDuckGo-only (no API keys needed), 3s delay between requests (`RANKPRINT_SERP_DELAY`). Input: `url` + `terms[]` (list[str]).
+- Package manifest includes [`reddit*`, `llm*`, `rankprint*`, `seo*`, `aeo*`, `geo*`] — only first three exist.
+- rankprint `llm.client.structured_chat` currently only supports Anthropic (returns `None` for other providers).
+- `.env.example` documents additional rankprint env vars (`TAVILY_API_KEY`, `SEARCH_PROVIDER`, etc.) not shown in README.
+- Tests use standard pytest auto-discovery; async tests use `pytest.mark.asyncio`.

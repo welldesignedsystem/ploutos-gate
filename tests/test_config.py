@@ -4,9 +4,15 @@ from reddit.config import RedditConfig
 
 
 def test_from_env_defaults():
-    for key in ("REDDIT_CLIENT_ID", "REDDIT_CLIENT_SECRET", "REDDIT_USERNAME",
-                "REDDIT_PASSWORD", "REDDIT_SUBREDDIT_ALLOWLIST", "REDDIT_SUBREDDIT_BLOCKLIST",
-                "REDDIT_USER_AGENT"):
+    for key in (
+        "REDDIT_CLIENT_ID",
+        "REDDIT_CLIENT_SECRET",
+        "REDDIT_USERNAME",
+        "REDDIT_PASSWORD",
+        "REDDIT_SUBREDDIT_ALLOWLIST",
+        "REDDIT_SUBREDDIT_BLOCKLIST",
+        "REDDIT_USER_AGENT",
+    ):
         os.environ.pop(key, None)
 
     cfg = RedditConfig.from_env()

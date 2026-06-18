@@ -20,8 +20,7 @@ def register_tools(mcp: FastMCP, get_client: Callable[[], RedditClient]) -> None
     @mcp.tool(
         name="analyzer_keyword_discovery",
         description=(
-            "Mine Reddit for natural-language queries and long-tail keyword "
-            "opportunities around a given topic."
+            "Mine Reddit for natural-language queries and long-tail keyword opportunities around a given topic."
         ),
     )
     def keyword_discovery(params: KeywordDiscovery) -> str:
@@ -37,8 +36,7 @@ def register_tools(mcp: FastMCP, get_client: Callable[[], RedditClient]) -> None
     @mcp.tool(
         name="analyzer_intent_analysis",
         description=(
-            "Classify why people search for a query — informational, commercial, "
-            "transactional, or navigational intent."
+            "Classify why people search for a query — informational, commercial, transactional, or navigational intent."
         ),
     )
     def intent_analysis(params: IntentAnalysis) -> str:
@@ -52,10 +50,7 @@ def register_tools(mcp: FastMCP, get_client: Callable[[], RedditClient]) -> None
 
     @mcp.tool(
         name="analyzer_content_gaps",
-        description=(
-            "Find frequently asked questions with no good answers — "
-            "content gaps worth targeting."
-        ),
+        description=("Find frequently asked questions with no good answers — content gaps worth targeting."),
     )
     def content_gaps(params: ContentGapAnalysis) -> str:
         return run_analysis(
@@ -68,9 +63,7 @@ def register_tools(mcp: FastMCP, get_client: Callable[[], RedditClient]) -> None
 
     @mcp.tool(
         name="analyzer_trend_detection",
-        description=(
-            "Detect rising topics in a subreddit before they peak on Google Trends."
-        ),
+        description=("Detect rising topics in a subreddit before they peak on Google Trends."),
     )
     def trend_detection(params: TrendDetection) -> str:
         return run_analysis(
@@ -84,10 +77,7 @@ def register_tools(mcp: FastMCP, get_client: Callable[[], RedditClient]) -> None
 
     @mcp.tool(
         name="analyzer_competitor_research",
-        description=(
-            "Surface which domains get cited on Reddit for a given topic — "
-            "a proxy for topical authority."
-        ),
+        description=("Surface which domains get cited on Reddit for a given topic — a proxy for topical authority."),
     )
     def competitor_research(params: CompetitorResearch) -> str:
         return run_analysis(
@@ -100,10 +90,7 @@ def register_tools(mcp: FastMCP, get_client: Callable[[], RedditClient]) -> None
 
     @mcp.tool(
         name="analyzer_backlink_prospecting",
-        description=(
-            "Find organic link placement opportunities by analyzing where "
-            "Redditors link externally."
-        ),
+        description=("Find organic link placement opportunities by analyzing where Redditors link externally."),
     )
     def backlink_prospecting(params: BacklinkProspecting) -> str:
         return run_analysis(
@@ -117,8 +104,7 @@ def register_tools(mcp: FastMCP, get_client: Callable[[], RedditClient]) -> None
     @mcp.tool(
         name="analyzer_serp_targeting",
         description=(
-            "Model what Google rewards in ranking Reddit threads — "
-            "title patterns, structure, engagement signals."
+            "Model what Google rewards in ranking Reddit threads — title patterns, structure, engagement signals."
         ),
     )
     def serp_targeting(params: SERPTargeting) -> str:
