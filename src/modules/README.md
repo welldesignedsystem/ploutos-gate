@@ -4,15 +4,12 @@ Domain packages for `ploutos-gate` project. Each subdirectory is a self-containe
 
 | Package | Description |
 |---------|-------------|
-| `reddit/` | Reddit MCP server — search, browse, info, write, monitor tools via PRAW |
+| `probe/` | Competitor-finding term generator — crawl, profile, LLM generates terms with reasoning |
+| `llm/` | Provider-agnostic LLM config, agent factory, and async client |
 
 Packages are importable directly (no `modules.` prefix):
 
 ```python
-from reddit.client import RedditClient
-from reddit.config import RedditConfig
-
-config = RedditConfig.from_env()
-client = RedditClient(config)
-posts = client.search_posts("keyword", limit=5)
+from probe.client import probe
+from llm.models import LLMConfig
 ```

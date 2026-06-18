@@ -1,4 +1,5 @@
 import json
+import os
 import re
 from typing import Any, cast
 
@@ -8,6 +9,7 @@ from pydantic import BaseModel
 from .models import LLMConfig
 
 _ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
+_OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 
 async def chat(
@@ -18,33 +20,76 @@ async def chat(
     if config is None:
         config = LLMConfig.from_env()
 
-    if config.provider != "anthropic" or not config.api_key:
+    if not config.api_key:
         return None
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(
-                _ANTHROPIC_URL,
-                headers={
-                    "x-api-key": config.api_key,
-                    "anthropic-version": "2023-06-01",
-                    "content-type": "application/json",
-                },
-                json={
-                    "model": config.model,
-                    "max_tokens": 1024,
-                    "system": system,
-                    "messages": [{"role": "user", "content": user}],
-                },
-            )
-            resp.raise_for_status()
-            data: dict[str, Any] = resp.json()
-            blocks = cast(list[dict[str, Any]], data.get("content", []))
-            for block in blocks:
-                if block.get("type") == "text":
-                    return cast(str, block["text"])
-            return None
+        if config.provider == "anthropic":
+            return await _chat_anthropic(system, user, config)
+        return await _chat_openai_compat(system, user, config)
     except Exception:
+        return None
+
+
+async def _chat_anthropic(
+    system: str,
+    user: str,
+    config: LLMConfig,
+) -> str | None:
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.post(
+            _ANTHROPIC_URL,
+            headers={
+                "x-api-key": config.api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json={
+                "model": config.model,
+                "max_tokens": 1024,
+                "system": system,
+                "messages": [{"role": "user", "content": user}],
+            },
+        )
+        resp.raise_for_status()
+        data: dict[str, Any] = resp.json()
+        blocks = cast(list[dict[str, Any]], data.get("content", []))
+        for block in blocks:
+            if block.get("type") == "text":
+                return cast(str, block["text"])
+        return None
+
+
+async def _chat_openai_compat(
+    system: str,
+    user: str,
+    config: LLMConfig,
+) -> str | None:
+    base_url = os.getenv("OPENROUTER_SITE_URL", _OPENROUTER_URL)
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.post(
+            base_url,
+            headers={
+                "Authorization": f"Bearer {config.api_key}",
+                "content-type": "application/json",
+            },
+            json={
+                "model": config.model,
+                "max_tokens": 1024,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+            },
+        )
+        resp.raise_for_status()
+        data: dict[str, Any] = resp.json()
+        choices = cast(list[dict[str, Any]], data.get("choices", []))
+        for choice in choices:
+            msg = choice.get("message", {})
+            content = cast(str | None, msg.get("content"))
+            if content:
+                return content
         return None
 
 
