@@ -2,12 +2,20 @@ import os
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel
 
 from website_analyzer.analyzer import analyze_company
+from website_analyzer.auth import (
+    register_user,
+    verify_user,
+    request_otp,
+    verify_otp,
+    refresh_access_token,
+)
 from website_analyzer.competitors import search_competitors
 from website_analyzer.crawler import crawl_website
+from website_analyzer.deps import require_auth
 from website_analyzer.models import CompetitorGroup, CompetitorSelection
 from website_analyzer.search import generate_search_queries, format_search_context
 from website_analyzer.search_sources import list_sources
@@ -44,6 +52,47 @@ class CompetitorsResponse(BaseModel):
     results: list[CompetitorGroup]
 
 
+# ── Auth request/response models ──
+
+class RegisterRequest(BaseModel):
+    name: str
+    email: str
+
+
+class VerifyRequest(BaseModel):
+    email: str
+    code: str
+
+
+class OtpRequest(BaseModel):
+    email: str
+
+
+class OtpVerifyRequest(BaseModel):
+    email: str
+    code: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    refresh_token: str | None = None
+    id_token: str | None = None
+    expires_in: int
+    token_type: str
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
+class UserResponse(BaseModel):
+    sub: str
+    email: str
+    name: str
+
+
+# ── App ──
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     yield
@@ -62,8 +111,61 @@ async def health():
     return {"status": "ok"}
 
 
-@app.post("/analyze", response_model=AnalyzeResponse, responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}})
-async def analyze(req: AnalyzeRequest):
+# ── Auth endpoints ──
+
+@app.post("/auth/register", responses={400: {"model": ErrorResponse}})
+async def register(req: RegisterRequest):
+    try:
+        return register_user(req.name, req.email)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/auth/verify", responses={400: {"model": ErrorResponse}})
+async def verify(req: VerifyRequest):
+    try:
+        return verify_user(req.email, req.code)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/auth/login", response_model=dict, responses={400: {"model": ErrorResponse}})
+async def login(req: OtpRequest):
+    try:
+        return request_otp(req.email)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/auth/login/verify", response_model=TokenResponse, responses={400: {"model": ErrorResponse}})
+async def login_verify(req: OtpVerifyRequest):
+    try:
+        return verify_otp(req.email, req.code)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/auth/refresh", response_model=TokenResponse, responses={400: {"model": ErrorResponse}})
+async def refresh(req: RefreshRequest):
+    try:
+        return refresh_access_token(req.refresh_token)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/auth/me", response_model=UserResponse, responses={401: {"model": ErrorResponse}})
+async def me(user: dict = Depends(require_auth)):
+    return UserResponse(sub=user.get("sub", ""), email=user.get("email", ""), name=user.get("name", ""))
+
+
+# ── Protected endpoints ──
+
+@app.post("/analyze", response_model=AnalyzeResponse, responses={400: {"model": ErrorResponse}, 401: {"model": ErrorResponse}, 500: {"model": ErrorResponse}})
+async def analyze(req: AnalyzeRequest, user: dict = Depends(require_auth)):
     url = req.url.strip()
     if not url.startswith(("http://", "https://")):
         url = f"https://{url}"
@@ -93,8 +195,8 @@ async def analyze(req: AnalyzeRequest):
     return AnalyzeResponse(**profile.model_dump())
 
 
-@app.post("/competitors", response_model=CompetitorsResponse, responses={400: {"model": ErrorResponse}})
-async def competitors(req: CompetitorsRequest):
+@app.post("/competitors", response_model=CompetitorsResponse, responses={400: {"model": ErrorResponse}, 401: {"model": ErrorResponse}})
+async def competitors(req: CompetitorsRequest, user: dict = Depends(require_auth)):
     if not req.selections:
         raise HTTPException(status_code=400, detail="At least one selection is required.")
 
