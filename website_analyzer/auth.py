@@ -40,6 +40,8 @@ def _client_id() -> str:
 
 # ── Password generation ──────────────────────────────────────────────
 
+_pending_passwords: dict[str, str] = {}
+
 def _generate_password() -> str:
     pw = [
         secrets.choice(string.ascii_lowercase),
@@ -56,15 +58,17 @@ def _generate_password() -> str:
 
 def register_user(name: str, email: str) -> dict:
     try:
+        password = _generate_password()
         _cognito().sign_up(
             ClientId=_client_id(),
             Username=email,
-            Password=_generate_password(),
+            Password=password,
             UserAttributes=[
                 {"Name": "email", "Value": email},
                 {"Name": "name", "Value": name},
             ],
         )
+        _pending_passwords[email] = password
         return {"message": "Verification code sent to email.", "email": email}
     except _cognito().exceptions.UsernameExistsException:
         raise ValueError("An account with this email already exists.")
@@ -79,6 +83,21 @@ def verify_user(email: str, code: str) -> dict:
             Username=email,
             ConfirmationCode=code,
         )
+        password = _pending_passwords.pop(email, None)
+        if password:
+            response = _cognito().initiate_auth(
+                ClientId=_client_id(),
+                AuthFlow="USER_PASSWORD_AUTH",
+                AuthParameters={"USERNAME": email, "PASSWORD": password},
+            )
+            auth = response["AuthenticationResult"]
+            return {
+                "access_token": auth["AccessToken"],
+                "refresh_token": auth["RefreshToken"],
+                "id_token": auth["IdToken"],
+                "expires_in": auth["ExpiresIn"],
+                "token_type": "Bearer",
+            }
         return {"message": "Email verified successfully.", "email": email}
     except _cognito().exceptions.CodeMismatchException:
         raise ValueError("Invalid verification code.")
