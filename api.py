@@ -6,8 +6,11 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from website_analyzer.analyzer import analyze_company
+from website_analyzer.competitors import search_competitors
 from website_analyzer.crawler import crawl_website
+from website_analyzer.models import CompetitorGroup, CompetitorSelection
 from website_analyzer.search import generate_search_queries, format_search_context
+from website_analyzer.search_sources import list_sources
 
 load_dotenv()
 
@@ -29,6 +32,16 @@ class AnalyzeResponse(BaseModel):
 
 class ErrorResponse(BaseModel):
     detail: str
+
+
+class CompetitorsRequest(BaseModel):
+    selections: list[CompetitorSelection]
+    sources: list[str] | None = None
+    max_results: int = 5
+
+
+class CompetitorsResponse(BaseModel):
+    results: list[CompetitorGroup]
 
 
 @asynccontextmanager
@@ -78,6 +91,24 @@ async def analyze(req: AnalyzeRequest):
         raise HTTPException(status_code=500, detail=f"Analysis failed: {e}")
 
     return AnalyzeResponse(**profile.model_dump())
+
+
+@app.post("/competitors", response_model=CompetitorsResponse, responses={400: {"model": ErrorResponse}})
+async def competitors(req: CompetitorsRequest):
+    if not req.selections:
+        raise HTTPException(status_code=400, detail="At least one selection is required.")
+
+    sources = req.sources or list_sources()
+    for s in sources:
+        if s not in list_sources():
+            raise HTTPException(status_code=400, detail=f"Unknown source: {s}. Available: {list_sources()}")
+
+    try:
+        groups = await search_competitors(req.selections, sources=sources, max_results=req.max_results)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Competitor search failed: {e}")
+
+    return CompetitorsResponse(results=groups)
 
 
 if __name__ == "__main__":

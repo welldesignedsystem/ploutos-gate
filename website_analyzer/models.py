@@ -18,3 +18,22 @@ class SearchQuery(BaseModel):
 
 class SearchQueryList(BaseModel):
     queries: list[SearchQuery] = Field(description="List of search queries with reasons")
+
+
+class CompetitorSelection(BaseModel):
+    audience: list[str] = Field(default_factory=list)
+    products: list[str] = Field(default_factory=list)
+    categories: list[str] = Field(default_factory=list)
+    terms: list[str] = Field(default_factory=list)
+
+
+class CompetitorResult(BaseModel):
+    name: str
+    domain: str
+    description: str
+    source: str
+
+
+class CompetitorGroup(BaseModel):
+    selection: CompetitorSelection
+    companies: list[CompetitorResult]
