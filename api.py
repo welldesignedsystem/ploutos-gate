@@ -1,8 +1,10 @@
+import json
 import os
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from website_analyzer.analyzer import analyze_company
@@ -193,6 +195,61 @@ async def analyze(req: AnalyzeRequest, user: dict = Depends(require_auth)):
         raise HTTPException(status_code=500, detail=f"Analysis failed: {e}")
 
     return AnalyzeResponse(**profile.model_dump())
+
+
+async def _stream_analyze(url: str, max_terms: int):
+    def _event(event_type: str, data: object) -> str:
+        return f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
+
+    yield _event("log", {"message": f"Starting analysis of {url}…"})
+
+    if not url.startswith(("http://", "https://")):
+        url = f"https://{url}"
+
+    yield _event("log", {"message": "Scanning homepage…"})
+    try:
+        crawl_content = await crawl_website(url)
+        if not crawl_content:
+            yield _event("error", {"message": "No content could be extracted from the website."})
+            return
+        char_count = len(crawl_content)
+        yield _event("log", {"message": f"Homepage scanned ({char_count:,} characters)"})
+    except Exception as e:
+        yield _event("error", {"message": f"Failed to scan website: {e}"})
+        return
+
+    yield _event("log", {"message": "Generating research queries…"})
+    try:
+        search_queries = await generate_search_queries(crawl_content, max_terms=max_terms)
+        yield _event("log", {"message": f"Generated {len(search_queries)} search queries"})
+    except Exception:
+        search_queries = []
+        yield _event("log", {"message": "No search queries generated"})
+
+    yield _event("log", {"message": "Searching for company information…"})
+    try:
+        search_context = format_search_context(search_queries) if search_queries else ""
+        yield _event("log", {"message": "Search results gathered"})
+    except Exception:
+        search_context = ""
+        yield _event("log", {"message": "No search results available"})
+
+    yield _event("log", {"message": "Building company profile…"})
+    try:
+        profile = await analyze_company(url, crawl_content, search_context)
+        yield _event("log", {"message": "Company profile ready"})
+        yield _event("result", {"profile": profile.model_dump()})
+    except Exception as e:
+        yield _event("error", {"message": f"Analysis failed: {e}"})
+
+
+@app.post("/analyze/stream", responses={401: {"model": ErrorResponse}})
+async def analyze_stream(req: AnalyzeRequest, user: dict = Depends(require_auth)):
+    url = req.url.strip()
+    return StreamingResponse(
+        _stream_analyze(url, max_terms=req.max_terms),
+        media_type="text/event-stream",
+    )
 
 
 @app.post("/competitors", response_model=CompetitorsResponse, responses={400: {"model": ErrorResponse}, 401: {"model": ErrorResponse}})
