@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class CompanyProfile(BaseModel):
@@ -26,14 +26,25 @@ class CompetitorSelection(BaseModel):
     categories: list[str] = Field(default_factory=list)
     terms: list[str] = Field(default_factory=list)
 
+    @model_validator(mode="after")
+    def _at_least_one(self):
+        if not self.audience and not self.products and not self.categories and not self.terms:
+            raise ValueError("At least one of audience, products, categories, or terms must be provided.")
+        return self
+
 
 class CompetitorResult(BaseModel):
     name: str
     domain: str
+    url: str
     description: str
     source: str
 
 
 class CompetitorGroup(BaseModel):
     selection: CompetitorSelection
+    companies: list[CompetitorResult]
+
+
+class FilteredCompanyList(BaseModel):
     companies: list[CompetitorResult]

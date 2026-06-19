@@ -1,4 +1,5 @@
 import os
+from urllib.parse import urlparse
 
 from tavily import TavilyClient
 
@@ -22,8 +23,9 @@ class TavilySearchSource(SearchSource):
             results = response.get("results", [])
             return [
                 CompetitorResult(
-                    name=_extract_company_name(r.get("content", ""), r.get("url", "")),
+                    name=r.get("title", _extract_domain(r.get("url", ""))),
                     domain=_extract_domain(r.get("url", "")),
+                    url=r.get("url", ""),
                     description=r.get("content", "")[:300],
                     source=self.name,
                 )
@@ -35,13 +37,7 @@ class TavilySearchSource(SearchSource):
 
 
 def _extract_domain(url: str) -> str:
-    from urllib.parse import urlparse
     try:
         return urlparse(url).netloc.lower()
     except Exception:
         return url
-
-
-def _extract_company_name(content: str, url: str) -> str:
-    domain = _extract_domain(url)
-    return domain.removesuffix(".com").removesuffix(".io").removesuffix(".org").split(".")[-1].title() if domain else url
