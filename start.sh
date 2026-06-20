@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+export PATH="$HOME/.local/bin:$PATH"
+
 HOST="${HOST:-0.0.0.0}"
 PORT="${PORT:-8000}"
 
