@@ -4,4 +4,8 @@ set -euo pipefail
 HOST="${HOST:-0.0.0.0}"
 PORT="${PORT:-8000}"
 
-exec uv run uvicorn api:app --host "$HOST" --port "$PORT" --reload
+exec uv run uvicorn api:app \
+  --host "$HOST" \
+  --port "$PORT" \
+  --workers "$(nproc)" \
+  --log-level info
