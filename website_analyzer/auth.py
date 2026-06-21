@@ -220,10 +220,13 @@ def refresh_access_token(refresh_token: str) -> dict:
             AuthParameters={"REFRESH_TOKEN": refresh_token},
         )
         auth = response["AuthenticationResult"]
-        return {
+        result = {
             "access_token": auth["AccessToken"],
             "expires_in": auth["ExpiresIn"],
             "token_type": "Bearer",
         }
+        if "IdToken" in auth:
+            result["id_token"] = auth["IdToken"]
+        return result
     except Exception as e:
         raise RuntimeError(f"Token refresh failed: {e}")
