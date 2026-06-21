@@ -17,6 +17,7 @@ from website_analyzer.auth import (
     refresh_access_token,
 )
 from website_analyzer.competitors import search_competitors
+from website_analyzer.contact import send_contact_email
 from website_analyzer.crawler import crawl_website
 from website_analyzer.deps import require_auth
 from website_analyzer.models import CompetitorGroup, CompetitorSelection
@@ -94,6 +95,17 @@ class UserResponse(BaseModel):
     name: str
 
 
+class ContactRequest(BaseModel):
+    name: str
+    email: str
+    message: str
+    plan: str | None = None
+
+
+class ContactResponse(BaseModel):
+    message: str
+
+
 # ── App ──
 
 @asynccontextmanager
@@ -120,6 +132,18 @@ app.add_middleware(
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+# ── Contact endpoint ──
+
+@app.post("/contact", response_model=ContactResponse, responses={400: {"model": ErrorResponse}, 500: {"model": ErrorResponse}})
+async def contact(req: ContactRequest):
+    if not req.name.strip() or not req.email.strip() or not req.message.strip():
+        raise HTTPException(status_code=400, detail="Name, email, and message are required.")
+    try:
+        return send_contact_email(req.name.strip(), req.email.strip(), req.message.strip(), req.plan)
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ── Auth endpoints ──

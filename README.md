@@ -159,6 +159,41 @@ Returns grouped competitor lists per selection, deduplicated and filtered by Bed
 └── AGENTS.md                       # AI assistant context
 ```
 
+## Deployment
+
+### Local dev
+
+```bash
+uv run uvicorn api:app --reload
+# Server at http://localhost:8000, docs at http://localhost:8000/docs
+```
+
+Logs appear on stdout. The server reloads on code changes.
+
+### Production (EC2 via systemd)
+
+```bash
+# One-time service setup
+sudo cp ploutos-gate.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable ploutos-gate
+sudo systemctl start ploutos-gate
+```
+
+`deploy.sh` copies the service file (if missing) and restarts:
+
+```bash
+bash deploy.sh
+```
+
+`start.sh` auto-detects CPU count for workers. No reload. Service auto-restarts on failure (5s delay).
+
+### Logs (production)
+
+```bash
+journalctl -u ploutos-gate -f        # tail live logs
+journalctl -u ploutos-gate --no-pager # full log dump
+```
+
 ## Configuration (.env)
 
 | Key | Required | Description |
