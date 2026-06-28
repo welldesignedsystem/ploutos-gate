@@ -1,7 +1,9 @@
 import json
 import os
+import time
 from contextlib import asynccontextmanager
 
+import boto3
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -132,6 +134,49 @@ app.add_middleware(
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/health/deep")
+async def health_deep():
+    checks = {}
+
+    # Env vars
+    required_vars = ["TAVILY_API_KEY", "COGNITO_USER_POOL_ID", "COGNITO_CLIENT_ID"]
+    env_checks = {}
+    for var in required_vars:
+        env_checks[var] = bool(os.getenv(var))
+    checks["env"] = env_checks
+
+    # Bedrock client init
+    try:
+        region = os.getenv("AWS_REGION", "us-east-1")
+        role_arn = os.getenv("BEDROCK_ASSUME_ROLE_ARN")
+        if role_arn:
+            sts = boto3.client("sts", region_name=region)
+            sts.assume_role(RoleArn=role_arn, RoleSessionName="health-check", DurationSeconds=900)
+        client = boto3.client("bedrock-runtime", region_name=region)
+        checks["bedrock"] = {"ok": True, "region": region, "role_arn": bool(role_arn)}
+    except Exception as e:
+        checks["bedrock"] = {"ok": False, "error": str(e)}
+
+    # SES client init
+    try:
+        ses = boto3.client("sesv2", region_name=os.getenv("CONTACT_REGION", "us-east-1"))
+        checks["ses"] = {"ok": True}
+    except Exception as e:
+        checks["ses"] = {"ok": False, "error": str(e)}
+
+    # Cognito client init
+    try:
+        cognito = boto3.client("cognito-idp", region_name=os.getenv("COGNITO_REGION", "us-east-1"))
+        checks["cognito"] = {"ok": True, "user_pool_id": bool(os.getenv("COGNITO_USER_POOL_ID"))}
+    except Exception as e:
+        checks["cognito"] = {"ok": False, "error": str(e)}
+
+    all_ok = all(c.get("ok", False) for c in checks.values())
+    status_code = 200 if all_ok else 503
+
+    return {"status": "ok" if all_ok else "degraded", "checks": checks, "timestamp": time.time()}
 
 
 # ── Contact endpoint ──
