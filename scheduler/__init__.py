@@ -1,4 +1,4 @@
-from scheduler.generator import generate_facebook_scheduler
-from scheduler.models import APACFacebookScheduler
+from scheduler.generator import generate_schedule
+from scheduler.models import ScheduleOutput, ScheduleRequest
 
-__all__ = ["APACFacebookScheduler", "generate_facebook_scheduler"]
+__all__ = ["generate_schedule", "ScheduleOutput", "ScheduleRequest"]

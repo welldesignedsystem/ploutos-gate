@@ -6,7 +6,7 @@ export PATH="$HOME/.local/bin:$PATH"
 HOST="${HOST:-0.0.0.0}"
 PORT="${PORT:-8000}"
 
-exec uv run uvicorn api:app \
+exec uv run uvicorn main:app \
   --host "$HOST" \
   --port "$PORT" \
   --workers "$(nproc)" \
