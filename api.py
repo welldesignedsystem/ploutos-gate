@@ -219,6 +219,8 @@ async def login(req: OtpRequest):
         return request_otp(req.email)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/auth/login/verify", response_model=TokenResponse, responses={400: {"model": ErrorResponse}})
@@ -227,6 +229,8 @@ async def login_verify(req: OtpVerifyRequest):
         return verify_otp(req.email, req.code)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/auth/refresh", response_model=TokenResponse, responses={400: {"model": ErrorResponse}})
