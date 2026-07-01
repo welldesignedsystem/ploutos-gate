@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from api import app
 from website_analyzer.deps import require_auth
+from website_analyzer.models import CompetitorGroup, CompetitorResult, CompetitorSelection
 
 
 def _override_auth() -> dict:
@@ -154,6 +155,24 @@ class TestAnalyze:
         )
         assert resp.status_code == 400
 
+    @patch("api.analyze_store")
+    def test_get_cached_analyze_not_found(self, mock_store: Any, client: TestClient):
+        mock_store.get.return_value = None
+        resp = client.get("/analyze/https://acme.com", headers={"Authorization": "Bearer test"})
+        assert resp.status_code == 404
+
+    @patch("api.analyze_store")
+    def test_get_cached_analyze_found(self, mock_store: Any, client: TestClient):
+        mock_store.get.return_value = {
+            "data": {"company_name": "Acme", "products": []},
+            "updatedAt": "2026-07-01T00:00:00+00:00",
+        }
+        resp = client.get("/analyze/https://acme.com", headers={"Authorization": "Bearer test"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["profile"]["company_name"] == "Acme"
+        assert "updatedAt" in data
+
     @patch("api.crawl_website", new_callable=AsyncMock)
     def test_analyze_crawl_fails(self, mock_crawl: Any, client: TestClient):
         mock_crawl.side_effect = RuntimeError("crawl failed")
@@ -176,18 +195,12 @@ class TestCompetitors:
     @patch("api.search_competitors", new_callable=AsyncMock)
     def test_competitors(self, mock_search: Any, client: TestClient):
         mock_search.return_value = [
-            {
-                "selection": {"products": ["CRM"]},
-                "companies": [
-                    {
-                        "name": "Rival",
-                        "domain": "rival.com",
-                        "url": "https://rival.com",
-                        "description": "A rival",
-                        "source": "tavily",
-                    }
+            CompetitorGroup(
+                selection=CompetitorSelection(products=["CRM"]),
+                companies=[
+                    CompetitorResult(name="Rival", domain="rival.com", url="https://rival.com", description="A rival", source="tavily"),
                 ],
-            }
+            )
         ]
 
         resp = client.post(

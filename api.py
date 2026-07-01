@@ -25,6 +25,7 @@ from website_analyzer.deps import require_auth
 from website_analyzer.models import CompetitorGroup, CompetitorSelection
 from website_analyzer.search import generate_search_queries, format_search_context
 from website_analyzer.search_sources import list_sources
+from common.store import create_store
 
 load_dotenv()
 
@@ -49,6 +50,7 @@ class ErrorResponse(BaseModel):
 
 
 class CompetitorsRequest(BaseModel):
+    url: str = ""
     selections: list[CompetitorSelection]
     sources: list[str] | None = None
     max_results: int = 5
@@ -107,6 +109,10 @@ class ContactRequest(BaseModel):
 class ContactResponse(BaseModel):
     message: str
 
+
+# ── Data stores ──
+
+analyze_store = create_store("ploutos-analyze")
 
 # ── App ──
 
@@ -246,6 +252,16 @@ async def me(user: dict = Depends(require_auth)):
     return UserResponse(sub=user.get("sub", ""), email=user.get("email", ""), name=user.get("name", ""))
 
 
+# ── Cached data endpoints ──
+
+@app.get("/analyze/{url:path}", responses={404: {"model": ErrorResponse}})
+async def get_cached_analyze(url: str, user: dict = Depends(require_auth)):
+    item = analyze_store.get(user.get("sub"), url)
+    if not item:
+        raise HTTPException(status_code=404, detail="No cached analysis found.")
+    return {"profile": item["data"], "updatedAt": item["updatedAt"]}
+
+
 # ── Protected endpoints ──
 
 @app.post("/analyze", response_model=AnalyzeResponse, responses={400: {"model": ErrorResponse}, 401: {"model": ErrorResponse}, 500: {"model": ErrorResponse}})
@@ -276,10 +292,11 @@ async def analyze(req: AnalyzeRequest, user: dict = Depends(require_auth)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Analysis failed: {e}")
 
+    analyze_store.put(user.get("sub"), url, profile.model_dump())
     return AnalyzeResponse(**profile.model_dump())
 
 
-async def _stream_analyze(url: str, max_terms: int):
+async def _stream_analyze(url: str, max_terms: int, user_id: str):
     def _event(event_type: str, data: object) -> str:
         return f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
 
@@ -319,7 +336,8 @@ async def _stream_analyze(url: str, max_terms: int):
     yield _event("log", {"message": "Building company profile…"})
     try:
         profile = await analyze_company(url, crawl_content, search_context)
-        yield _event("log", {"message": "Company profile ready"})
+        analyze_store.put(user_id, url, profile.model_dump())
+        yield _event("log", {"message": "Company profile saved"})
         yield _event("result", {"profile": profile.model_dump()})
     except Exception as e:
         yield _event("error", {"message": f"Analysis failed: {e}"})
@@ -329,7 +347,7 @@ async def _stream_analyze(url: str, max_terms: int):
 async def analyze_stream(req: AnalyzeRequest, user: dict = Depends(require_auth)):
     url = req.url.strip()
     return StreamingResponse(
-        _stream_analyze(url, max_terms=req.max_terms),
+        _stream_analyze(url, max_terms=req.max_terms, user_id=user.get("sub")),
         media_type="text/event-stream",
     )
 

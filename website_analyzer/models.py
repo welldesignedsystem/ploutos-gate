@@ -21,14 +21,19 @@ class SearchQueryList(BaseModel):
 
 
 class CompetitorSelection(BaseModel):
-    audience: list[str] = Field(default_factory=list)
-    products: list[str] = Field(default_factory=list)
-    categories: list[str] = Field(default_factory=list)
-    terms: list[str] = Field(default_factory=list)
+    audience: list[str] | None = Field(default=None)
+    products: list[str] | None = Field(default=None)
+    categories: list[str] | None = Field(default=None)
+    terms: list[str] | None = Field(default=None)
 
     @model_validator(mode="after")
     def _at_least_one(self):
-        if not self.audience and not self.products and not self.categories and not self.terms:
+        if (
+            not (self.audience or [])
+            and not (self.products or [])
+            and not (self.categories or [])
+            and not (self.terms or [])
+        ):
             raise ValueError("At least one of audience, products, categories, or terms must be provided.")
         return self
 
