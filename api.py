@@ -254,6 +254,12 @@ async def me(user: dict = Depends(require_auth)):
 
 # ── Cached data endpoints ──
 
+@app.get("/analyze", responses={200: {"description": "List of cached analyses for the current user"}})
+async def list_cached_analyses(user: dict = Depends(require_auth)):
+    items = analyze_store.list(user.get("sub"))
+    return {"analyses": items}
+
+
 @app.get("/analyze/{url:path}", responses={404: {"model": ErrorResponse}})
 async def get_cached_analyze(url: str, user: dict = Depends(require_auth)):
     item = analyze_store.get(user.get("sub"), url)

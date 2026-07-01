@@ -17,3 +17,7 @@ class DbStore(ABC):
     @abstractmethod
     def delete(self, user_id: str, key: str) -> None:
         ...
+
+    @abstractmethod
+    def list(self, user_id: str) -> list[dict]:
+        ...

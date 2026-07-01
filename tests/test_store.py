@@ -28,6 +28,11 @@ class InMemoryStore(DbStore):
     def delete(self, user_id: str, key: str) -> None:
         self._data.pop((user_id, key), None)
 
+    def list(self, user_id: str) -> list[dict]:
+        return [
+            v for (uid, _), v in self._data.items() if uid == user_id
+        ]
+
 
 @pytest.fixture
 def store() -> InMemoryStore:
@@ -71,6 +76,18 @@ class TestInMemoryStore:
         store.put("u1", "https://acme.com", {"name": "New"})
         item = store.get("u1", "https://acme.com")
         assert item["data"]["name"] == "New"
+
+    def test_list_returns_user_items(self, store: InMemoryStore):
+        store.put("u1", "https://a.com", {"name": "A"})
+        store.put("u1", "https://b.com", {"name": "B"})
+        store.put("u2", "https://c.com", {"name": "C"})
+        items = store.list("u1")
+        assert len(items) == 2
+        urls = {i["data"]["name"] for i in items}
+        assert urls == {"A", "B"}
+
+    def test_list_empty_when_no_items(self, store: InMemoryStore):
+        assert store.list("u1") == []
 
 
 class TestDynamoDbStore:
@@ -150,3 +167,30 @@ class TestDynamoDbStore:
         table.delete_item.assert_called_once_with(
             Key={"userId": "u1", "url": "https://acme.com"},
         )
+
+    @patch("common.store.dynamodb.boto3.resource")
+    def test_list(self, mock_resource: MagicMock):
+        import json
+        table = MagicMock()
+        mock_resource.return_value.Table.return_value = table
+        table.query.return_value = {
+            "Items": [
+                {"userId": "u1", "url": "https://a.com", "data": json.dumps({"name": "A"}), "updatedAt": "t1"},
+                {"userId": "u1", "url": "https://b.com", "data": json.dumps({"name": "B"}), "updatedAt": "t2"},
+            ]
+        }
+
+        ddb = DynamoDbStore("test-table")
+        items = ddb.list("u1")
+        assert len(items) == 2
+        assert items[0]["data"]["name"] == "A"
+        assert items[1]["url"] == "https://b.com"
+
+    @patch("common.store.dynamodb.boto3.resource")
+    def test_list_empty(self, mock_resource: MagicMock):
+        table = MagicMock()
+        mock_resource.return_value.Table.return_value = table
+        table.query.return_value = {"Items": []}
+
+        ddb = DynamoDbStore("test-table")
+        assert ddb.list("u1") == []
