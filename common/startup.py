@@ -18,6 +18,9 @@ def _patch_scheduler_endpoint():
         req: ScheduleRequest,
         user: dict = Depends(require_auth),
     ):
+        config = api.ensure_config(user.get("sub"))
+        if not config.schedule_generation_enabled:
+            raise HTTPException(status_code=403, detail="Schedule generation is not available. Please contact the administrator for access.")
         try:
             result = await generate_schedule(req)
             output = ScheduleOutput(**result.model_dump())

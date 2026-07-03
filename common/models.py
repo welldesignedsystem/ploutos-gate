@@ -9,3 +9,9 @@ class CompanyProfile(BaseModel):
     audience: list[str] = Field(description="Target audience or customer segments")
     categories: list[str] = Field(description="Business categories the company falls under")
     terms: list[str] = Field(description="Relevant terms or term combinations related to the business")
+
+
+class UserConfig(BaseModel):
+    website_analysis_enabled: bool = True
+    competitor_search_enabled: bool = True
+    schedule_generation_enabled: bool = True

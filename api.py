@@ -25,6 +25,7 @@ from website_analyzer.deps import require_auth
 from website_analyzer.models import CompetitorGroup, CompetitorSelection
 from website_analyzer.search import generate_search_queries, format_search_context
 from website_analyzer.search_sources import list_sources
+from common.models import UserConfig
 from common.store import create_store
 
 load_dotenv()
@@ -99,6 +100,18 @@ class UserResponse(BaseModel):
     name: str
 
 
+class ConfigResponse(BaseModel):
+    website_analysis_enabled: bool
+    competitor_search_enabled: bool
+    schedule_generation_enabled: bool
+
+
+class ConfigUpdateRequest(BaseModel):
+    website_analysis_enabled: bool | None = None
+    competitor_search_enabled: bool | None = None
+    schedule_generation_enabled: bool | None = None
+
+
 class ContactRequest(BaseModel):
     name: str
     email: str
@@ -113,6 +126,18 @@ class ContactResponse(BaseModel):
 # ── Data stores ──
 
 analyze_store = create_store("ploutos-analyze")
+config_store = create_store("ploutos-config")
+CONFIG_SK = "_config_"
+
+
+def ensure_config(user_id: str) -> UserConfig:
+    item = config_store.get(user_id, CONFIG_SK)
+    if item:
+        return UserConfig(**item["data"])
+    defaults = UserConfig()
+    config_store.put(user_id, CONFIG_SK, defaults.model_dump())
+    return defaults
+
 
 # ── App ──
 
@@ -232,7 +257,15 @@ async def login(req: OtpRequest):
 @app.post("/auth/login/verify", response_model=TokenResponse, responses={400: {"model": ErrorResponse}})
 async def login_verify(req: OtpVerifyRequest):
     try:
-        return verify_otp(req.email, req.code)
+        result = verify_otp(req.email, req.code)
+        if id_token := result.get("id_token"):
+            try:
+                from jose import jwt
+                claims = jwt.get_unverified_claims(id_token)
+                ensure_config(claims.get("sub"))
+            except Exception:
+                pass
+        return TokenResponse(**result)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except RuntimeError as e:
@@ -249,7 +282,25 @@ async def refresh(req: RefreshRequest):
 
 @app.get("/auth/me", response_model=UserResponse, responses={401: {"model": ErrorResponse}})
 async def me(user: dict = Depends(require_auth)):
+    ensure_config(user.get("sub"))
     return UserResponse(sub=user.get("sub", ""), email=user.get("email", ""), name=user.get("name", ""))
+
+
+# ── Config endpoints ──
+
+@app.get("/config", response_model=ConfigResponse, responses={401: {"model": ErrorResponse}})
+async def get_config(user: dict = Depends(require_auth)):
+    config = ensure_config(user.get("sub"))
+    return ConfigResponse(**config.model_dump())
+
+
+@app.put("/config", response_model=ConfigResponse, responses={400: {"model": ErrorResponse}, 401: {"model": ErrorResponse}})
+async def update_config(req: ConfigUpdateRequest, user: dict = Depends(require_auth)):
+    config = ensure_config(user.get("sub"))
+    update_data = req.model_dump(exclude_none=True)
+    updated = config.model_copy(update=update_data)
+    config_store.put(user.get("sub"), CONFIG_SK, updated.model_dump())
+    return ConfigResponse(**updated.model_dump())
 
 
 # ── Cached data endpoints ──
@@ -270,8 +321,12 @@ async def get_cached_analyze(url: str, user: dict = Depends(require_auth)):
 
 # ── Protected endpoints ──
 
-@app.post("/analyze", response_model=AnalyzeResponse, responses={400: {"model": ErrorResponse}, 401: {"model": ErrorResponse}, 500: {"model": ErrorResponse}})
+@app.post("/analyze", response_model=AnalyzeResponse, responses={400: {"model": ErrorResponse}, 401: {"model": ErrorResponse}, 403: {"model": ErrorResponse}, 500: {"model": ErrorResponse}})
 async def analyze(req: AnalyzeRequest, user: dict = Depends(require_auth)):
+    config = ensure_config(user.get("sub"))
+    if not config.website_analysis_enabled:
+        raise HTTPException(status_code=403, detail="Website analysis is not available. Please contact the administrator for access.")
+
     url = req.url.strip()
     if not url.startswith(("http://", "https://")):
         url = f"https://{url}"
@@ -349,8 +404,11 @@ async def _stream_analyze(url: str, max_terms: int, user_id: str):
         yield _event("error", {"message": f"Analysis failed: {e}"})
 
 
-@app.post("/analyze/stream", responses={401: {"model": ErrorResponse}})
+@app.post("/analyze/stream", responses={401: {"model": ErrorResponse}, 403: {"model": ErrorResponse}})
 async def analyze_stream(req: AnalyzeRequest, user: dict = Depends(require_auth)):
+    config = ensure_config(user.get("sub"))
+    if not config.website_analysis_enabled:
+        raise HTTPException(status_code=403, detail="Website analysis is not available. Please contact the administrator for access.")
     url = req.url.strip()
     return StreamingResponse(
         _stream_analyze(url, max_terms=req.max_terms, user_id=user.get("sub")),
@@ -358,8 +416,12 @@ async def analyze_stream(req: AnalyzeRequest, user: dict = Depends(require_auth)
     )
 
 
-@app.post("/competitors", response_model=CompetitorsResponse, responses={400: {"model": ErrorResponse}, 401: {"model": ErrorResponse}})
+@app.post("/competitors", response_model=CompetitorsResponse, responses={400: {"model": ErrorResponse}, 401: {"model": ErrorResponse}, 403: {"model": ErrorResponse}})
 async def competitors(req: CompetitorsRequest, user: dict = Depends(require_auth)):
+    config = ensure_config(user.get("sub"))
+    if not config.competitor_search_enabled:
+        raise HTTPException(status_code=403, detail="Competitor search is not available. Please contact the administrator for access.")
+
     if not req.selections:
         raise HTTPException(status_code=400, detail="At least one selection is required.")
 

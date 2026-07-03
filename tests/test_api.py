@@ -5,13 +5,24 @@ from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 
-from api import app
+from api import app, config_store
+from tests.test_store import InMemoryStore
 from website_analyzer.deps import require_auth
 from website_analyzer.models import CompetitorGroup, CompetitorResult, CompetitorSelection
 
 
 def _override_auth() -> dict:
     return {"sub": "u1", "email": "a@b.com"}
+
+
+def _setup_inmemory_config():
+    import api
+    api.config_store = InMemoryStore()
+    api.config_store.put("u1", api.CONFIG_SK, {
+        "website_analysis_enabled": True,
+        "competitor_search_enabled": True,
+        "schedule_generation_enabled": True,
+    })
 
 
 def test_health(client: TestClient):
@@ -107,6 +118,7 @@ class TestAuth:
 class TestAnalyze:
     def setup_method(self):
         app.dependency_overrides[require_auth] = _override_auth
+        _setup_inmemory_config()
 
     def teardown_method(self):
         app.dependency_overrides.clear()
@@ -188,6 +200,7 @@ class TestAnalyze:
 class TestCompetitors:
     def setup_method(self):
         app.dependency_overrides[require_auth] = _override_auth
+        _setup_inmemory_config()
 
     def teardown_method(self):
         app.dependency_overrides.clear()
@@ -225,6 +238,7 @@ class TestCompetitors:
 class TestAnalyzeStream:
     def setup_method(self):
         app.dependency_overrides[require_auth] = _override_auth
+        _setup_inmemory_config()
 
     def teardown_method(self):
         app.dependency_overrides.clear()
