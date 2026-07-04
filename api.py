@@ -17,11 +17,15 @@ from website_analyzer.auth import (
     request_otp,
     verify_otp,
     refresh_access_token,
+    login_with_password,
+    forgot_password,
+    reset_password,
+    change_password,
 )
 from website_analyzer.competitors import search_competitors
 from website_analyzer.contact import send_contact_email
 from website_analyzer.crawler import crawl_website
-from website_analyzer.deps import require_auth
+from website_analyzer.deps import require_auth, require_auth_raw
 from website_analyzer.models import CompetitorGroup, CompetitorSelection
 from website_analyzer.search import generate_search_queries, format_search_context
 from website_analyzer.search_sources import list_sources
@@ -92,6 +96,30 @@ class TokenResponse(BaseModel):
 
 class RefreshRequest(BaseModel):
     refresh_token: str
+
+
+class PasswordLoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+class ResetPasswordRequest(BaseModel):
+    email: str
+    code: str
+    new_password: str
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class MessageResponse(BaseModel):
+    message: str
 
 
 class UserResponse(BaseModel):
@@ -284,6 +312,62 @@ async def refresh(req: RefreshRequest):
 async def me(user: dict = Depends(require_auth)):
     ensure_config(user.get("sub"))
     return UserResponse(sub=user.get("sub", ""), email=user.get("email", ""), name=user.get("name", ""))
+
+
+@app.post("/auth/login/password", response_model=TokenResponse, responses={400: {"model": ErrorResponse}})
+async def login_password(req: PasswordLoginRequest):
+    try:
+        result = login_with_password(req.email, req.password)
+        if id_token := result.get("id_token"):
+            try:
+                from jose import jwt
+                claims = jwt.get_unverified_claims(id_token)
+                ensure_config(claims.get("sub"))
+            except Exception:
+                pass
+        return TokenResponse(**result)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/auth/password/forgot", response_model=MessageResponse, responses={400: {"model": ErrorResponse}})
+async def password_forgot(req: ForgotPasswordRequest):
+    try:
+        return forgot_password(req.email)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/auth/password/reset", response_model=TokenResponse, responses={400: {"model": ErrorResponse}})
+async def password_reset(req: ResetPasswordRequest):
+    try:
+        result = reset_password(req.email, req.code, req.new_password)
+        if id_token := result.get("id_token"):
+            try:
+                from jose import jwt
+                claims = jwt.get_unverified_claims(id_token)
+                ensure_config(claims.get("sub"))
+            except Exception:
+                pass
+        return TokenResponse(**result)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/auth/password/change", response_model=MessageResponse, responses={400: {"model": ErrorResponse}, 401: {"model": ErrorResponse}})
+async def password_change(req: ChangePasswordRequest, access_token: str = Depends(require_auth_raw)):
+    try:
+        return change_password(access_token, req.current_password, req.new_password)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ── Config endpoints ──

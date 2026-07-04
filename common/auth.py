@@ -216,3 +216,90 @@ def refresh_access_token(refresh_token: str) -> dict:
         return result
     except Exception as e:
         raise RuntimeError(f"Token refresh failed: {e}")
+
+
+def login_with_password(email: str, password: str) -> dict:
+    try:
+        response = _cognito().initiate_auth(
+            ClientId=_client_id(),
+            AuthFlow="USER_PASSWORD_AUTH",
+            AuthParameters={"USERNAME": email, "PASSWORD": password},
+        )
+        auth = response["AuthenticationResult"]
+        return {
+            "access_token": auth["AccessToken"],
+            "refresh_token": auth["RefreshToken"],
+            "id_token": auth["IdToken"],
+            "expires_in": auth["ExpiresIn"],
+            "token_type": "Bearer",
+        }
+    except _cognito().exceptions.NotAuthorizedException:
+        raise ValueError("Invalid email or password.")
+    except _cognito().exceptions.UserNotFoundException:
+        raise ValueError("No account found with this email.")
+    except _cognito().exceptions.UserNotConfirmedException:
+        raise ValueError("Account not verified. Please check your email for the verification code.")
+    except Exception as e:
+        raise RuntimeError(f"Login failed: {e}")
+
+
+def forgot_password(email: str) -> dict:
+    try:
+        _cognito().forgot_password(
+            ClientId=_client_id(),
+            Username=email,
+        )
+        return {"message": "Reset code sent to email.", "email": email}
+    except _cognito().exceptions.UserNotFoundException:
+        raise ValueError("No account found with this email.")
+    except Exception as e:
+        raise RuntimeError(f"Failed to send reset code: {e}")
+
+
+def reset_password(email: str, code: str, new_password: str) -> dict:
+    try:
+        _cognito().confirm_forgot_password(
+            ClientId=_client_id(),
+            Username=email,
+            ConfirmationCode=code,
+            Password=new_password,
+        )
+        response = _cognito().initiate_auth(
+            ClientId=_client_id(),
+            AuthFlow="USER_PASSWORD_AUTH",
+            AuthParameters={"USERNAME": email, "PASSWORD": new_password},
+        )
+        auth = response["AuthenticationResult"]
+        return {
+            "access_token": auth["AccessToken"],
+            "refresh_token": auth["RefreshToken"],
+            "id_token": auth["IdToken"],
+            "expires_in": auth["ExpiresIn"],
+            "token_type": "Bearer",
+        }
+    except _cognito().exceptions.CodeMismatchException:
+        raise ValueError("Invalid reset code.")
+    except _cognito().exceptions.ExpiredCodeException:
+        raise ValueError("Reset code has expired.")
+    except _cognito().exceptions.InvalidPasswordException as e:
+        raise ValueError(f"Invalid password: {e}")
+    except Exception as e:
+        raise RuntimeError(f"Password reset failed: {e}")
+
+
+def change_password(access_token: str, current_password: str, new_password: str) -> dict:
+    try:
+        _cognito().change_password(
+            AccessToken=access_token,
+            PreviousPassword=current_password,
+            ProposedPassword=new_password,
+        )
+        return {"message": "Password changed successfully."}
+    except _cognito().exceptions.NotAuthorizedException:
+        raise ValueError("Current password is incorrect.")
+    except _cognito().exceptions.InvalidPasswordException as e:
+        raise ValueError(f"Invalid new password: {e}")
+    except _cognito().exceptions.LimitExceededException:
+        raise ValueError("Too many attempts. Try again later.")
+    except Exception as e:
+        raise RuntimeError(f"Password change failed: {e}")
