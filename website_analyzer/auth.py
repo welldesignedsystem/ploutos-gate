@@ -56,9 +56,9 @@ def _generate_password() -> str:
 
 # ── Register ─────────────────────────────────────────────────────────
 
-def register_user(name: str, email: str) -> dict:
+def register_user(name: str, email: str, password: str) -> dict:
     try:
-        password = _generate_password()
+        _pending_passwords[email] = password
         _cognito().sign_up(
             ClientId=_client_id(),
             Username=email,
@@ -68,7 +68,6 @@ def register_user(name: str, email: str) -> dict:
                 {"Name": "name", "Value": name},
             ],
         )
-        _pending_passwords[email] = password
         return {"message": "Verification code sent to email.", "email": email}
     except _cognito().exceptions.UsernameExistsException:
         raise ValueError("An account with this email already exists.")

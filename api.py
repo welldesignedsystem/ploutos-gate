@@ -70,6 +70,7 @@ class CompetitorsResponse(BaseModel):
 class RegisterRequest(BaseModel):
     name: str
     email: str
+    password: str
 
 
 class VerifyRequest(BaseModel):
@@ -255,7 +256,7 @@ async def contact(req: ContactRequest):
 @app.post("/auth/register", responses={400: {"model": ErrorResponse}})
 async def register(req: RegisterRequest):
     try:
-        return register_user(req.name, req.email)
+        return register_user(req.name, req.email, req.password)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except RuntimeError as e:
