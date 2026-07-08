@@ -31,6 +31,9 @@ from website_analyzer.search import generate_search_queries, format_search_conte
 from website_analyzer.search_sources import list_sources
 from common.models import UserConfig
 from common.store import create_store
+from report.generator import generate_report
+from report.models import ReportOutput
+from report.pdf import save_pdf_to_temp
 
 load_dotenv()
 
@@ -133,12 +136,14 @@ class ConfigResponse(BaseModel):
     website_analysis_enabled: bool
     competitor_search_enabled: bool
     schedule_generation_enabled: bool
+    report_generation_enabled: bool
 
 
 class ConfigUpdateRequest(BaseModel):
     website_analysis_enabled: bool | None = None
     competitor_search_enabled: bool | None = None
     schedule_generation_enabled: bool | None = None
+    report_generation_enabled: bool | None = None
 
 
 class ContactRequest(BaseModel):
@@ -152,9 +157,19 @@ class ContactResponse(BaseModel):
     message: str
 
 
+class ReportRequest(BaseModel):
+    url: str
+
+
+class ReportResponse(BaseModel):
+    report: ReportOutput
+    pdf_path: str | None = None
+
+
 # ── Data stores ──
 
 analyze_store = create_store("ploutos-analyze")
+report_store = create_store("ploutos-report")
 config_store = create_store("ploutos-config")
 CONFIG_SK = "_config_"
 
@@ -521,6 +536,60 @@ async def competitors(req: CompetitorsRequest, user: dict = Depends(require_auth
         raise HTTPException(status_code=500, detail=f"Competitor search failed: {e}")
 
     return CompetitorsResponse(results=groups)
+
+
+# ── Report endpoints ──
+
+
+@app.post("/report", response_model=ReportResponse, responses={400: {"model": ErrorResponse}, 401: {"model": ErrorResponse}, 403: {"model": ErrorResponse}, 500: {"model": ErrorResponse}})
+async def create_report(req: ReportRequest, user: dict = Depends(require_auth)):
+    config = ensure_config(user.get("sub"))
+    if not config.report_generation_enabled:
+        raise HTTPException(status_code=403, detail="Report generation is not available. Please contact the administrator for access.")
+
+    url = req.url.strip()
+    if not url.startswith(("http://", "https://")):
+        url = f"https://{url}"
+
+    cached = analyze_store.get(user.get("sub"), url)
+    if not cached:
+        raise HTTPException(status_code=404, detail="No cached analysis found. Run /analyze first.")
+    profile_data = cached["data"]
+
+    from common.models import CompanyProfile
+    profile = CompanyProfile(**profile_data)
+
+    try:
+        crawl_content = await crawl_website(url)
+    except Exception as e:
+        crawl_content = ""
+
+    try:
+        report = await generate_report(profile, crawl_content)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Report generation failed: {e}")
+
+    report_store.put(
+        user.get("sub"),
+        url,
+        report.model_dump(mode="json"),
+    )
+
+    pdf_path = None
+    try:
+        pdf_path = save_pdf_to_temp(report)
+    except Exception:
+        pass
+
+    return ReportResponse(report=report, pdf_path=pdf_path)
+
+
+@app.get("/report/{url:path}", responses={404: {"model": ErrorResponse}})
+async def get_cached_report(url: str, user: dict = Depends(require_auth)):
+    item = report_store.get(user.get("sub"), url)
+    if not item:
+        raise HTTPException(status_code=404, detail="No cached report found.")
+    return {"report": item["data"], "updatedAt": item["updatedAt"]}
 
 
 if __name__ == "__main__":

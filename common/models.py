@@ -15,3 +15,4 @@ class UserConfig(BaseModel):
     website_analysis_enabled: bool = True
     competitor_search_enabled: bool = True
     schedule_generation_enabled: bool = True
+    report_generation_enabled: bool = True
